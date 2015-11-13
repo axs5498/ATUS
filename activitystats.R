@@ -1,6 +1,6 @@
 #clear all variables in workspace
 rm(list = ls())
-#this is a comment line 
+
 #set input direcotry
 setwd("~/Dropbox/Ongoing_Work/Time_Use/Inputs")
 
