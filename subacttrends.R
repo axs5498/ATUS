@@ -18,7 +18,7 @@ file<-atusact[,c('TUCASEID','TRTIER1P','TUACTDUR24','TRTIER2P','TRCODEP')]
 #----TOCHANGE------#
 file_subact<-dcast(file,TUCASEID~TRTIER1P,value.var = "TUACTDUR24",sum)
 
-#gettin weight files and merging with dataset 
+#getting weight files and merging with dataset 
 atussumm<-read.table("~/Dropbox/Ongoing_Work/Time_Use/Inputs/atussum_0314.dat",header=TRUE,sep=",")
 file_weight<-atussumm[,c('TUCASEID','TUFNWGTP')]
 file_subact<-merge(x=file_subact,y=file_weight,by='TUCASEID',all.x = TRUE)
