@@ -185,7 +185,7 @@ id<-cumsum(table(ds$year))
 j<-1
 for (i in 1:12)
 {
-  chk[[i]]<-cast(activityds.instance[j:id[i],necessary.colnames],
+  chk[[i]]<-cast(ds[j:id[i],necessary.colnames],
             TUCASEID~TRCODEP,value = "TUACTDUR24",sum)
   j<-id[i]+1
 }
@@ -204,7 +204,7 @@ for (i in 1:12)
 }
 activityds.day<-activityds.day[-1,]
 ###CODE FOR WHERE
-whereds.day<-cast(activityds.instance[,necessary.colnames],
+whereds.day<-cast(ds[,necessary.colnames],
                   TUCASEID~TEWHERE,value = "TUACTDUR24",sum)
 whereds.day$year<-as.numeric(substr(whereds.day$TUCASEID,1,4))
 
@@ -284,6 +284,50 @@ for (y in 1:length(years))
     temp.whereds.hour<-NULL
   }
 }
+
+
+
+
+
+
+#Code for filtering and generating the dataset. 
+## for now do it for all the dataset.
+
+#the name of the main output file 
+descstats.activity<-data.frame()
+descstats.where<-data.frame()
+colnames.activity<-c('MajCategory','Category','Demographics','Stat.Category',
+                       'Statistic','Year','Activities','Values')
+colnames.where<-c('MajCategory','Category','Demographics','Stat.Category',
+                       'Statistic','Year','Where','Values')
+
+
+#input datasets 
+atussum<-read.table("atussum_0314.dat",header=TRUE,sep=",")
+atusresp<-read.table("atusresp_0314.dat",header=TRUE,sep=",")
+
+
+#formating the new datasets
+activityds.day[is.na(activityds.day)]<-0
+whereds.day[is.na(whereds.day)]<-0
+
+require(reshape)
+activityds.day<-melt(activityds.day,id.vars = c("TUCASEID")) #change name of the dataset 
+activityds.day<-merge(x=activityds.day,y=atussum[,c('TUCASEID','TUFNWGTP')],
+                      by.x="TUCASEID",all.x=TRUE) 
+activityds.day$year<-as.numeric(substr(activityds.day$TUCASEID,1,4))
+whereds.day<-melt(whereds.day,id.vars = c("TUCASEID")) #change name of the dataset 
+whereds.day<-merge(x=whereds.day,y=atussum[,c('TUCASEID','TUFNWGTP')],
+                      by.x="TUCASEID",all.x=TRUE) 
+whereds.day$year<-as.numeric(substr(whereds.day$TUCASEID,1,4))
+
+
+
+
+
+
+
+
 
 save.image()
 
