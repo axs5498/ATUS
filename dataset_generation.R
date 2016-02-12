@@ -17,7 +17,8 @@ whereds.hour<-data.frame()
 
 ##dataset needed 
 atusact<-read.table("atusact_0314.dat",header=TRUE,sep=",")
-
+atussum<-read.table("atussum_0314.dat",header=TRUE,sep=",")
+atusresp<-read.table("atusresp_0314.dat",header=TRUE,sep=",")
 
 #dataset preperation 
 ##find code errors and correct them 
@@ -27,7 +28,6 @@ atusact<-read.table("atusact_0314.dat",header=TRUE,sep=",")
 
 ##saving the original file in another file 
 ds<-atusact
-
 
 ##converting time to workable format 
 require(lubridate)
@@ -302,9 +302,6 @@ colnames.where<-c('MajCategory','Category','Demographics','Stat.Category',
                        'Statistic','Year','Where','Values')
 
 
-#input datasets 
-atussum<-read.table("atussum_0314.dat",header=TRUE,sep=",")
-atusresp<-read.table("atusresp_0314.dat",header=TRUE,sep=",")
 
 
 #formating the new datasets
@@ -312,15 +309,107 @@ activityds.day[is.na(activityds.day)]<-0
 whereds.day[is.na(whereds.day)]<-0
 
 require(reshape)
-activityds.day<-melt(activityds.day,id.vars = c("TUCASEID")) #change name of the dataset 
-activityds.day<-merge(x=activityds.day,y=atussum[,c('TUCASEID','TUFNWGTP')],
-                      by.x="TUCASEID",all.x=TRUE) 
+#formating day datasets do not rerun this without checkign the inputs and outputs 
+##adding year and melting 
+activityds.day$year<-NULL 
+chk<-melt(activityds.day,id.vars = c("TUCASEID")) 
+activityds.day<-chk
 activityds.day$year<-as.numeric(substr(activityds.day$TUCASEID,1,4))
-whereds.day<-melt(whereds.day,id.vars = c("TUCASEID")) #change name of the dataset 
-whereds.day<-merge(x=whereds.day,y=atussum[,c('TUCASEID','TUFNWGTP')],
-                      by.x="TUCASEID",all.x=TRUE) 
+whereds.day$year<-NULL 
+whereds.day<-melt(whereds.day,id.vars = c("TUCASEID")) 
 whereds.day$year<-as.numeric(substr(whereds.day$TUCASEID,1,4))
 
+##merging 
+whereds.day$TUFNWGTP<-atussum$TUFNWGTP[match(whereds.day$TUCASEID,
+                                             atussum$TUCASEID)]
+whereds.instance$TUFNWGTP<-atussum$TUFNWGTP[match(whereds.instance$TUCASEID,
+                                             atussum$TUCASEID)]
+whereds.hour$TUFNWGTP<-atussum$TUFNWGTP[match(whereds.hour$TUCASEID,
+                                             atussum$TUCASEID)]
+activityds.day$TUFNWGTP<-atussum$TUFNWGTP[match(activityds.day$TUCASEID,
+                                                atussum$TUCASEID)]
+activityds.instance$TUFNWGTP<-atussum$TUFNWGTP[match(activityds.instance$TUCASEID,
+                                                  atussum$TUCASEID)]
+activityds.hour$TUFNWGTP<-atussum$TUFNWGTP[match(activityds.hour$TUCASEID,
+                                              atussum$TUCASEID)]
+
+##renaming 
+whereds.day<-rename(whereds.day,c("TEWHERE"="variable",'TUFNWGTP'='weight'))
+whereds.instance<-rename(whereds.instance,c("TEWHERE"="variable","TUACTDUR24"="value",'TUFNWGTP'='weight'))
+whereds.hour<-rename(whereds.hour,c("TEWHERE"="variable","x"="value",'TUFNWGTP'='weight'))
+activityds.day<-rename(activityds.day,c("TRCODEP"="variable",'TUFNWGTP'='weight'))
+activityds.instance<-rename(activityds.instance,c("TRCODEP"="variable","TUACTDUR24"="value",'TUFNWGTP'='weight'))
+activityds.hour<-rename(activityds.hour,c("TRCODEP"="variable","x"="value",'TUFNWGTP'='weight'))
+
+
+
+#code for filtering should go here. 
+##the output of the filtering should contain a list with all the datasets 
+## currently better to focus only on activityds.day and whereds.day. in the future the codes for others
+## will be developed .
+
+
+
+#how to find the statistics 
+ls<-list(activityds.hour = activityds.hour,
+         activityds.day = activityds.day,
+         activityds.instance = activityds.instance,
+         whereds.hour = whereds.hour,
+         whereds.day = whereds.day,
+         whereds.instance = whereds.instance)
+
+majcat<-c('activity','where')
+cat<-c('hour','day')
+fil<-c('all','emp','unemp','retired','notinlaborforce')
+
+
+require(matrixStats)
+for (i in majcat)
+{
+  for (j in cat)
+  {
+    m<-paste0(i,'ds.',j)
+    vars.ddply<-ifelse(j!='hour',c('year','variable'),c('year','variable','hour'))
+    for (k in fil)
+    {
+      chk<-ddply(ls[[m]],vars.ddply,summarize,
+                 #fillers
+                 majcat = majcat,
+                 cat = cat, 
+                 fil = fil,
+                 #stats
+                 nmean = round(sum(value*weight)/sum(weight),2),
+                 pmean = round(sum(value*weight)/sum(weight[value!=0]),2),
+                 min = min(value[value!=0]),
+                 max = max(value),
+                 
+                 prate = ifelse(l==c('nat.avg'),round(sum(weight[value!=0])/sum(weight),2),
+                                round(sum(weight[value!=0])/sum(weight),2))
+      )
+    }
+  }
+}
+
+
+
+
+
+weighted.mean(activityds.day$value,activityds.day$weight)
+
+
+
+
+filter by year 
+filter by activity 
+{
+mean.navg.perday = wmean(ds$value,ds$tufnwgtp)
+mean.pavg.perday= wmean(ds$value,ds$tufnwgtp,na.rm=TRUE)
+mean.navg.perhour = wmean(ds$value,ds$tufnwgtp)
+mean.pavg.perhour= wmean(ds$value,ds$tufnwgtp,na.rm=TRUE)
+mean.pavg.persinstance = wmean(ds$value,ds$tufnwgtp)
+
+
+prate 
 
 
 
@@ -328,8 +417,11 @@ whereds.day$year<-as.numeric(substr(whereds.day$TUCASEID,1,4))
 
 
 
+}
 
-save.image()
+
+
+
 
 
 
