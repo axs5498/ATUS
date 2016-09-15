@@ -7,6 +7,8 @@
 ## locations x 3 files for activitylocation combination stats. 
 ## Note that in each list there are going to 12 dataframes for each year
 
+
+
 activityds.instance<-data.frame()
 activityds.day<-data.frame()
 activityds.hour<-data.frame()
@@ -16,6 +18,7 @@ whereds.hour<-data.frame()
 
 
 ##dataset needed 
+setwd("~/Dropbox/Ongoing_Work/Time_Use/Inputs")
 atusact<-read.table("atusact_0314.dat",header=TRUE,sep=",")
 atussum<-read.table("atussum_0314.dat",header=TRUE,sep=",")
 atusresp<-read.table("atusresp_0314.dat",header=TRUE,sep=",")

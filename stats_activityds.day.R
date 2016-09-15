@@ -8,9 +8,8 @@ linearModel<-data.frame()
 temp.desc.stat<-data.frame()
 
 
-filter<-c('emp','unemp','retired','notinlaborforce','all')
 
-necessary.colnames<-c('TUCASEID','TUFNWGTP','TELFS','TULAY','TULK','TUABSOT','TURETOT')
+necessary.colnames<-c('TUCASEID','TUFNWGTP','TELFS','TULAY','TULK','TUABSOT','TURETOT','TEAGE')
 filter.file<-atusresp[,necessary.colnames]
 filter.file$emp<-ifelse(filter.file$TELFS<3,1,0)
 filter.file$unemp<-ifelse((filter.file$TELFS<5&filter.file$TELFS>2),1,0)
@@ -18,8 +17,20 @@ filter.file$retired<-ifelse(filter.file$TELFS==5&filter.file$TURETOT==1,1,0)
 filter.file$notinlaborforce<-ifelse(filter.file$TELFS==5&filter.file$TURETOT!=1,1,0)
 filter.file$all<-rep(1,length(filter.file$TUCASEID))
 
+filter.file<-merge(x=filter.file,y=atussum[,c("TUCASEID","TEAGE")],by.x = "TUCASEID",all.x = TRUE)
+filter.file$age.lt18<-ifelse(filter.file$TEAGE<18,1,0)
+filter.file$age.18to24<-ifelse(filter.file$TEAGE>=18&filter.file$TEAGE<25,1,0)
+filter.file$age.25to34<-ifelse(filter.file$TEAGE>=25&filter.file$TEAGE<35,1,0)
+filter.file$age.35to44<-ifelse(filter.file$TEAGE>=35&filter.file$TEAGE<45,1,0)
+filter.file$age.45to54<-ifelse(filter.file$TEAGE>=45&filter.file$TEAGE<55,1,0)
+filter.file$age.55to64<-ifelse(filter.file$TEAGE>=55&filter.file$TEAGE<65,1,0)
+filter.file$age.ge65<-ifelse(filter.file$TEAGE>=65,1,0)
 
-for (i in 1:2)
+filter<-c('emp','unemp','retired','notinlaborforce','all',"age.lt18","age.18to24","age.25to34","age.35to44",
+          "age.45to54","age.55to64","age.ge65")
+
+
+for (i in 1)
 {
   ds1<-ls[[i]]
   

@@ -1,0 +1,254 @@
+---
+title: "Code Documentation for Decomposition Paper"
+output: pdf_document
+---
+
+```{r packages, include=TRUE, echo=FALSE, eval=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+require(reshape)
+require(plyr)
+require(matrixStats)
+require(lubridate)
+require(reshape2)
+
+
+
+```
+
+#Dataset Preperation: 
+
+There are many step in dataset preperation. Two outputs are expected from this script are discussed below. 
+1) Descriptive statistics that has the following column names. year, activity, location, statistic. The file presents statistics such as mean, min, max and variance for each year the activity conducted at a particular location. The locations would need to be classified as residential, non-residential, transportation and other. Transportation will include only personal transportation as driver or passenger. 
+2) The regression results that has the slope and intercept for each location and the activity. There are two sub-files expected. One contains location, slope, intercept. While the other contain, location, activity, slope and intercept. For the latter subfile slope values with 90% confidence would be included further activities that were performed for less than 5 mins would not be included. 
+
+The logical flow of the script is to 1) data preperation 2) Descriptive statistics and 3) Regression results. 
+
+The dataset preperation will take the _atusact, atussumm & atusresp_ files and summarize them to develop the descriptive statistics. The preperation includes creating new columns that map the locational data into sectors for each activity. The output of the data preperation will include a file that contains the following column names. caseid, activity, location, time, year. 
+
+
+```{r datasetprep, include=TRUE, echo=FALSE, eval=TRUE}
+
+#working directory
+setwd("~/Dropbox/Ongoing_Work/Time_Use/Inputs")
+
+#load dataset
+atusact<-read.table("atusact_0314.dat",header=TRUE,sep=",")
+atussum<-read.table("atussum_0314.dat",header=TRUE,sep=",")
+atusresp<-read.table("atusresp_0314.dat",header=TRUE,sep=",")
+
+#loading description variables
+actnames<-read.csv('allactivitycodes_description.csv') #readin description file
+actnames<-rename(actnames,c("V1"="variable","description"="act_desc")) #renameing
+
+#saving the original file in another file 
+ds<-atusact
+ds$year<-as.numeric(substr(ds$TUCASEID,1,4))
+ds<-subset(ds,year<=2012)
+years<-unique(ds$year)
+
+
+#find the codes and correcting them 
+codestochange<-read.csv('codestochange.csv') #list of codes to change from activity file 
+codestochange$replace<-rowSums(codestochange[,3:4],na.rm = TRUE,dims = 1)
+##changing the error codes in the atusact file.the codes in the atussumm file is not touched right now. 
+for (i in 1:length(codestochange$X))
+{
+  id<-which(ds$TRCODEP==codestochange$codes_NA[i])#codestochange$numbers[i]<-length(id)
+  if (codestochange$replace[i]!=0)
+  {
+    ds$TRCODEP[id]<-codestochange$replace[i]
+  }
+}
+
+#removing unnecessary columns 
+necessary.colnames<-c('TUCASEID','TUACTDUR24','TRCODEP','TEWHERE')
+
+ds<-ds[,c(necessary.colnames)]
+
+# code for creating the new sector variables 
+res.code<-c(-1,1,3) #blank, home and other's home
+travel.code<-c(12,13)   #(12:21,99) # all travel 
+commercial.code<-c(2,4,5,6,7,8,9,10,11,30,31,32) # Non-residential location
+other.code<-c(-3,-2,89,99,14:21) #unspecified and not coded
+#othertravel.code<-c(99,14:21) # other travel codes 
+ds$newwhere<-NA 
+ds$newwhere[ds$TEWHERE %in% res.code]<-"Residential"
+ds$newwhere[ds$TEWHERE %in% travel.code]<-"Transportation"
+ds$newwhere[ds$TEWHERE %in% commercial.code]<-"Non_Residential"
+ds$newwhere[ds$TEWHERE %in% other.code]<-"Other"
+#ds$newwhere[ds$TEWHERE %in% othertravel.code]<-"Other_Travel_Modes"
+
+#aggregating ||||| time = 1min and 30 secs
+newds<-aggregate(TUACTDUR24~TUCASEID+TRCODEP+newwhere,
+                    data=ds,FUN=sum) 
+
+#longds<-cast(newds,)
+
+# #adding missing variables 
+# for (k in unique(newds$year))
+# {
+#   for (i in unique(newds$TRCODEP))
+#   {
+#     for (j in unique(newds$newwhere))
+#     {
+#       count.missingIDS<-
+#     }
+#   }
+# }
+# 
+# missvars<-
+
+newds<-newds[order(newds$newwhere,newds$TRCODEP,newds$TUCASEID),]
+
+#new variable year and weight
+newds$TUFNWGTP<-atussum$TUFNWGTP[match(newds$TUCASEID,atussum$TUCASEID)]
+newds$year<-as.numeric(substr(newds$TUCASEID,1,4))
+
+#renaming some column names 
+newds<-rename(newds,c("TRCODEP"="variable","TUFNWGTP"="weight",
+                      "TUACTDUR24"="value"))
+
+#data prep to map the subpopulations
+necessary.colnames<-c('TUCASEID','TUFNWGTP','TELFS','TULAY','TULK','TUABSOT','TURETOT')
+filter.file<-atusresp[,necessary.colnames]
+##employment category
+filter.file$emp<-ifelse(filter.file$TELFS<3,1,0)
+filter.file$unemp<-ifelse((filter.file$TELFS<5&filter.file$TELFS>2),1,0)
+filter.file$retired<-ifelse(filter.file$TELFS==5&filter.file$TURETOT==1,1,0)
+filter.file$notinlaborforce<-ifelse(filter.file$TELFS==5&filter.file$TURETOT!=1,1,0)
+filter.file$all<-rep(1,length(filter.file$TUCASEID))
+##age
+filter.file<-merge(x=filter.file,y=atussum[,c("TUCASEID","TEAGE")],by.x = "TUCASEID",all.x = TRUE)
+filter.file$age.lt18<-ifelse(filter.file$TEAGE<18,1,0)
+filter.file$age.18to24<-ifelse(filter.file$TEAGE>=18&filter.file$TEAGE<25,1,0)
+filter.file$age.25to34<-ifelse(filter.file$TEAGE>=25&filter.file$TEAGE<35,1,0)
+filter.file$age.35to44<-ifelse(filter.file$TEAGE>=35&filter.file$TEAGE<45,1,0)
+filter.file$age.45to54<-ifelse(filter.file$TEAGE>=45&filter.file$TEAGE<55,1,0)
+filter.file$age.55to64<-ifelse(filter.file$TEAGE>=55&filter.file$TEAGE<65,1,0)
+filter.file$age.ge65<-ifelse(filter.file$TEAGE>=65,1,0)
+filter.file$year<-as.numeric(substr(filter.file$TUCASEID,1,4))
+##filter variable
+filter<-c('emp','unemp','retired','notinlaborforce','all',"age.lt18","age.18to24","age.25to34","age.35to44","age.45to54","age.55to64","age.ge65")
+
+
+#save image is paper1_redo.Rdata is until here. 
+
+```
+
+#Descriptive statistics 
+In this step the subpopulation for which descriptive statistics need to be developed are defined in the dataset. The descriptive statistics explored include weighted mean, min, max, weighted standard deviation, count - number of people participated in the activity and participation rate. People might have started or stopped performing some actitivies as time progressed. Capturing those trends are necessary before performing the regression. During the regression results we typical make such results into the following with a zero for years when activity was not performed. year = 2003:2012 and time = {0,0,0,0,0,0,0,0,0,20,22}. The regression equation used in the calculation is. $year=\alpha * time+ intercept$. 
+
+
+```{r desc_stats, include=TRUE, echo=FALSE, eval=TRUE}
+
+#generating the statistics 
+desc.stat<-data.frame()
+temp.desc.stat<-data.frame()
+
+#find the total weights for each subpopulation
+summ.weight<-data.frame(matrix(nrow = 10,ncol = length(filter)))
+colnames(summ.weight)<-filter
+for (i in 1:length(filter))
+{
+  filterid<-which(filter.file[,filter[i]]==1)
+  for (j in 1:length(years))
+  {
+    yearid<-which(atussum$TUYEAR==years[j])
+    id<-intersect(filterid,yearid)
+    summ.weight[j,i]<-sum(atussum$TUFNWGTP[id])
+  }
+}
+
+#getting the statistics 
+for (j in filter)
+{
+  #creating a temp datast for each filter
+  id<-filter.file$TUCASEID[filter.file[,j]==1] #filtering TUCASEID
+  tempds<-newds[newds$TUCASEID %in% id,] #new temp dataset
+  ###code to calculate the yearly statistics 
+  for (k in 1:length(years))
+  {
+    
+    temp<-ddply(tempds[tempds$year %in% years[k],],.(variable,newwhere),summarize,
+                year = unique(year),
+                #prate = round(sum(weight)/summ.weight[k,j],2),
+                mean = round(sum(weight*value)/summ.weight[k,j],2)
+                )
+    
+    #temp.desc.stat<-melt(temp,id.vars=c("year","variable","newwhere"))
+    #colnames(temp.desc.stat)<-c('year','variable','stat.type','value')
+    #temp.desc.stat$value<-round(temp.desc.stat$value,2)
+    #temp.desc.stat$data.type<-names(ls[i])
+    temp.desc.stat<-temp #remove this line when previous 4 lines are added 
+    temp.desc.stat$demog<-j
+    
+    #saving
+    desc.stat<-rbind(desc.stat,temp.desc.stat)
+    rm(temp.desc.stat)
+  }
+}
+
+#checking the results of the desc.stat file with atussumm. To do that what i will do is, to pick any activity for a particular year or a combination of years and find the mean from the atussum datafile. The result is compared with a mean value derived from the desc.stat file. 
+
+id.main<-which(filter.file$emp==1&filter.file$year==2003)
+id.descstat<-which(desc.stat$variable==10101&desc.stat$year==2003&desc.stat$demog=="emp")
+round(weighted.mean(atussum$t010101[id.main],atussum$TUFNWGTP[id.main]),2)-
+  sum(desc.stat$mean[id.descstat])
+
+#adding necessary NA's and zero's to perform regression. 
+new.desc.stat<-dcast(desc.stat, year+demog+newwhere~variable,value.var = "mean") #casting
+desc.stat<-melt(new.desc.stat,id.vars = c("year","demog","newwhere")) #remelt
+desc.stat<-merge(x=desc.stat,y=actnames,by='variable',all.x = TRUE) #merging to descstat
+write.csv(desc.stat,'desc.stat.csv')
+
+
+```
+
+#Regression
+In the previous step, a file named *desc.stat* was generated. It has the following *colnames*, *year,demog,newwhere,variable,value*. In this stage linear model will be developed. Regression should be conducted only for activities that have a mean value greater than 5minutes in a day and those with pvalue greater than 90%
+
+
+```{r regression, include=TRUE, echo=FALSE, eval=TRUE}
+
+temp.ds<-desc.stat #generating the temporary dataset 
+temp.ds$value[is.na(desc.stat$value)]<-0 # converting all the values 
+
+linmod <- function(df) 
+{
+  summary(lm(value ~ year, data = mutate(df, year = year - min(year))))
+}
+
+temp.summary.lm<-dlply(temp.ds,.(demog,newwhere,variable),linmod) 
+temp.coef.lm<-ldply(temp.summary.lm,coef)
+
+#finding id to match the stats 
+a<-as.numeric(temp.coef.lm$variable)
+seq<-rle(a)
+cumseq.lengths<-cumsum(seq$lengths)
+temp.coef.lm$coef<-0
+temp.coef.lm$coef[cumseq.lengths[seq$lengths==1]]<-1
+temp.coef.lm<-temp.coef.lm[temp.coef.lm$coef==0,]
+temp.coef.lm$coef<-rep(c('Intercept','Slope'),length(temp.coef.lm[,1])/2)
+
+#adding the intercept and slope statistics in the same row 
+file1<-temp.coef.lm[temp.coef.lm$coef=="Slope",]
+file2<-temp.coef.lm[temp.coef.lm$coef=="Intercept",]
+
+mergedfile<-merge(x=file1,y=file2,by=c("variable","demog","newwhere","act_desc"))
+mergedfile<-rename(mergedfile,c("Estimate.x"="Slope","Std. Error.x"="Slope_Std.Err","t value.x"="Slope_t-value","Pr(>|t|).x"="Slope_Pr(>|t|)","Estimate.y"="Intercept","Std. Error.y"="Intercept_Std.Err","t value.y"="Intercept_t-value","Pr(>|t|).y"="Intercept_Pr(>|t|)")) #renameing
+
+#cleaning the merged file for publication 
+coef.lm<-mergedfile[,-c(9,11:14)]
+
+#removing activities with intercept less than 5 and p value greater than 90%
+coef.lm<-coef.lm[coef.lm$Intercept>=5&coef.lm$`Slope_Pr(>|t|)`<=0.1,]
+
+#saving the file 
+write.csv(coef.lm,'coef.all.csv')
+
+#adding description for the file 
+temp.coef.lm<-merge(x=temp.coef.lm,y=actnames,by='variable',all.x = TRUE) #merging to slopefile
+
+
+
+```
